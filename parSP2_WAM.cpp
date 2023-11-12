@@ -97,9 +97,8 @@ void processEdgeSP2(int z, int k, std::atomic<int> &min_dist)
     }
 }
 
-void parSP2Algo()
+void parSP2Algo(std::atomic<int> &min_dist)
 {
-    std::atomic <int> min_dist;
     do
     {
         int z;
@@ -137,6 +136,7 @@ void parSP2Algo()
 int main()
 {
     std::vector <std::thread> threads;
+    std::atomic <int> min_dist{0};
     int n, no_of_threads;
     no_of_threads = 2;
     std::ifstream infile;
@@ -157,7 +157,7 @@ int main()
 
     for(int i = 0; i < no_of_threads; ++i)
     {
-        threads.emplace_back(parSP2Algo);
+        threads.emplace_back(parSP2Algo, std::ref(min_dist));
     }
 
     for(auto &t: threads)
