@@ -110,9 +110,8 @@ void processEdgeSP2(GraphType &Graph, EdgeType Edge, std::atomic<int> &min_dist)
     }
 }
 
-void parSP2Algo(GraphType &Graph)
+void parSP2Algo(GraphType &Graph, std::atomic<int> &min_dist)
 {
-    std::atomic <int> min_dist;
     do
     {
         int z;
@@ -153,6 +152,7 @@ void parSP2Algo(GraphType &Graph)
 int main()
 {
     std::vector <std::thread> threads;
+    std::atomic <int> min_dist{0};
     int no_of_threads, s, d, w, max_node;
     no_of_threads = 2;
     max_node = 0;
@@ -180,7 +180,7 @@ int main()
 
     for(int i = 0; i < no_of_threads; ++i)
     {
-        threads.emplace_back(parSP2Algo, std::ref(Graph));
+        threads.emplace_back(parSP2Algo, std::ref(Graph), std::ref(min_dist));
     }
 
     for(auto &t: threads)
