@@ -10,6 +10,8 @@
 #define SOURCE 1
 #define MAXINT 9999999
 
+using namespace std;
+
 template<typename T>
 void pop_front(std::vector<T> &v)
 {
