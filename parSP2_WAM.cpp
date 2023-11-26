@@ -6,170 +6,149 @@
 #include <atomic>
 #include <vector>
 #include <fstream>
-#include <boost/integer_traits.hpp>
-#include <boost/lockfree/queue.hpp>
+#include "lockfreequeue.h"
 
+/*
+NOTE: check for correctness. I changes the source node to be variable. set the soure to be always 0 if errors occur.
+*/
+namespace parSP2{
+    const int MAX_N = 2048; // max number of nodes
+    const int INF = std::numeric_limits<int>::max();
 
-#define N 2048
+    // std::atomic<int> min_dist; 
+    LFQueue<int> R;
+    LFQueue<std::pair<int, int>> Heap;
+    std::vector<bool> fixed;
+    std::atomic<int> min_dist{0};
+    std::mutex mtx;
+    std::vector<int> min_in_weight;
+    std::array<std::atomic<int>, MAX_N> pred, distance;
+    // bool fixed[MAX_N] = {false};
 
-class pair
-{
-    public:
-    int first;
-    int second;
-
-    pair()
+    void initialise(const std::vector<std::vector<int>> & weights, int source)
     {
-        first = -1;
-        second = -1;
+        int n = weights.size();
+        min_in_weight = std::vector<int>(n, INF);
+        fixed = std::vector(n, false);
+        for (int i = 0; i < n; i++)
+        {
+            pred[i].store(0);
+            distance[i].store(INF);
+            // min_in_weight[i] = INF;
+            for (int j = 0; j < n; j++)
+            {
+                if (weights[j][i] > 0)
+                {
+                    ++pred[i];
+                    min_in_weight[i] = std::min(min_in_weight[i], weights[j][i]);
+                }
+            }
+        }
+        distance[source] = 0;
+        std::pair<int, int> p1(source, 0);
+        Heap.enqueue(p1);
     }
 
-    pair(int i, int j)
+    void processEdgeSP2(int z, int k, std::atomic<int> &min_dist, const std::vector<std::vector<int>>& weights)
     {
-        first = i;
-        second = j;
+        bool changed = false;
+
+        int new_dist = distance[z] + weights[z][k];
+        int k_dist = distance[k];
+
+        while (new_dist < distance[k])
+        {
+            if (distance[k].compare_exchange_weak(k_dist, new_dist, std::memory_order_relaxed))
+            {
+                changed = true;
+                break;
+            }
+
+            k_dist = distance[k];
+            new_dist = distance[z] + weights[z][k];
+        }
+
+        --pred[k];
+        if (k_dist <= (min_dist + min_in_weight[k]) || pred[k] <= 0)
+        {
+            fixed[k] = true;
+            R.enqueue(k);
+        }
+        else if (changed)
+        {
+            Heap.enqueue(std::pair(k, distance[k].load()));
+        }
+    }
+
+    void parSP2Algo(const std::vector<std::vector<int>>& weights)
+    {
+        do
+        {
+            int z;
+            if (!R.is_empty())
+            {
+                R.dequeue(z);
+                for (int i = 0; i < MAX_N; ++i)
+                {
+                    if ((!fixed[i]) && (weights[z][i] > 0))
+                    {
+                        processEdgeSP2(z, i, std::ref(min_dist), std::ref(weights));
+                    }
+                }
+            }
+
+            if (R.is_empty())
+            {
+                if (!Heap.is_empty())
+                {
+                    std::pair<int, int> vertex;
+                    Heap.dequeue(vertex);
+                    int j = vertex.first;
+                    min_dist = vertex.second;
+                    if (!fixed[j])
+                    {
+                        fixed[j] = true;
+                        R.enqueue(j);
+                    }
+                }
+            }
+        } while (!(R.is_empty() && Heap.is_empty()));
+    }
+    
+    std::vector<int> run(const std::vector<std::vector<int>>& weights, int source = 0, int no_of_threads = 1)
+    {
+
+        int n = weights.size();
+        initialise(weights, 0);
+        std::vector<std::thread> threads;
+        // int weights[MAX_N][MAX_N]; // element [i][j] represents edge from node i to node j with
+
+        for (int i = 0; i < no_of_threads; ++i) threads.emplace_back(parSP2Algo, std::ref(weights));
+        for (auto &t : threads) t.join();
+        for (int i = 0; i < n; ++i) std::cout << distance[i] << " ";
+
+        std::vector<int> res(n);
+        for(int i=0;i<n;i++)res[i] = distance[i].load();
+        return res;
     }
 };
 
-const int INF = boost::integer_traits<int>::const_max;
-
-std::mutex mtx;
-
-int weights[N][N];        // element [i][j] represents edge from node i to node j with 
-int min_in_weight[N];
-std::array<std::atomic<int>, N> pred, distance;
-bool fixed[N] = {false};
-
-boost::lockfree::queue <pair, boost::lockfree::capacity<128>> Heap;
-
-boost::lockfree::queue <int, boost::lockfree::capacity <128>> R;
-
-void initialise()
-{
-
-    for(int i = 0; i < N; i++)
-    {
-        pred[i].store(0);
-        distance[i].store(INF);
-        min_in_weight[i] = INF;
-        for(int j = 0; j < N; j++)
-        {
-            if(weights[j][i] > 0)
-            {
-                ++pred[i];
-                min_in_weight[i] = std::min(min_in_weight[i], weights[j][i]);
-            }
-        }
-    }
-    distance[0] = 0;
-    pair p1(0,0);
-    Heap.push(p1);
-}
-
-void processEdgeSP2(int z, int k, std::atomic<int> &min_dist)
-{
-    bool changed = false;
-
-    int new_dist = distance[z] + weights[z][k];
-    int k_dist = distance[k];
-
-    while(new_dist < distance[k])
-    {
-        if(distance[k].compare_exchange_weak(k_dist, new_dist, std::memory_order_relaxed))
-        {
-            changed = true;
-            break;
-        }
-
-        k_dist = distance[k];
-        new_dist = distance[z] + weights[z][k];
-    }
-
-    --pred[k];
-    if(k_dist <= (min_dist + min_in_weight[k]) || pred[k] <= 0)
-    {
-        fixed[k] = true;
-        R.push(k);
-    }
-    else if(changed)
-    {
-        Heap.push(pair(k, distance[k].load()));
-    }
-}
-
-void parSP2Algo(std::atomic<int> &min_dist)
-{
-    do
-    {
-        int z;
-        if(!R.empty())
-        {
-            R.pop(z);
-            for(int i=0; i < N; ++i)
-            {
-                if( (!fixed[i]) && (weights[z][i] > 0) )
-                {
-                    processEdgeSP2(z, i, std::ref(min_dist));
-                }
-            }
-        }
-
-        if(R.empty())
-        {
-            if(!Heap.empty())
-            {
-                pair vertex;
-                Heap.pop(vertex);
-                int j = vertex.first;
-                min_dist = vertex.second;
-                if(!fixed[j])
-                {
-                    fixed[j] = true;
-                    R.push(j);
-                }
-
-            }
-        }
-    } while (!( R.empty() && Heap.empty() ));
-}
-
 int main()
 {
-    std::vector <std::thread> threads;
-    std::atomic <int> min_dist{0};
-    int n, no_of_threads;
-    no_of_threads = 2;
+    int n;
     std::ifstream infile;
     infile.open("input.txt");
-    infile >> n;                                            //Input consists of number of nodes
+    infile >> n; // Input consists of number of nodes
 
-    for(int i = 0; i < n; ++i)                              //followed by the weighted adjacency matrix
+    std::vector<std::vector<int>> weights(n, std::vector<int>(n));
+    for (int i = 0; i < n; ++i) // followed by the weighted adjacency matrix
     {
-        for(int j = 0; j < n; ++j)
+        for (int j = 0; j < n; ++j)
         {
             infile >> weights[i][j];
         }
     }
 
     infile.close();
-
-    initialise();
-
-    for(int i = 0; i < no_of_threads; ++i)
-    {
-        threads.emplace_back(parSP2Algo, std::ref(min_dist));
-    }
-
-    for(auto &t: threads)
-    {
-        t.join();
-    }
-
-    for(int i = 0; i < n; ++i)
-    {
-        std::cout << distance[i] << " ";
-    }
-    std::cout << "\n";
-
-    return 0;
+    parSP2::run(weights, 0, 2);
 }

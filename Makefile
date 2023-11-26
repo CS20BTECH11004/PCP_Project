@@ -6,6 +6,7 @@ dijkstra:
 	g++-13 ParallelDijkstra.h -o parDijk.o
 parSP2:
 	g++-13 -std=c++20 -Wall $(AMAN_INCLUDES) parSP2_WAM.cpp -o parSP2.o                        
+	g++-13 -std=c++20 -Wall $(AMAN_INCLUDES) parSP2_struct.cpp -o parSP2_struct.o                        
 
 clear:
 	rm *.o
