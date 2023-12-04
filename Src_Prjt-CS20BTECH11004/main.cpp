@@ -76,7 +76,7 @@ int main(int argc, char *argv[]){
 
     std::cout << "Baseline:\t";
     auto base_start = std::chrono::high_resolution_clock::now();
-    auto res0 = Dijkstra::run(graph);
+    auto res0 = Baseline::run(graph);
     auto base_end = std::chrono::high_resolution_clock::now();
     for(auto &i: res0) std::cout << i << " ";
     std::cout << std::endl;
@@ -106,17 +106,10 @@ int main(int argc, char *argv[]){
     std::cout << std::endl;
 
 
-
-
     std::cout<< "results:\n"
             << "baseline runtime: " << std::chrono::duration_cast<std::chrono::microseconds>(base_end - base_start).count() << '\n'
             << "dijkstra's runtime: " << std::chrono::duration_cast<std::chrono::microseconds>(dijk_end - dijk_start).count() << '\n'
             << "delta stepping runtime: " << std::chrono::duration_cast<std::chrono::microseconds>(delta_end - delta_start).count() << '\n'
             << "parSP2 runtime: " << std::chrono::duration_cast<std::chrono::microseconds>(parsp2_end - parsp2_start).count() << '\n'
             << std::endl;
-    // std::cout << "parSP2: ";
-    // auto res2 = parSP2::run(graph);
-    // for(auto &i: res2) std::cout << i << " ";
-    // std::cout << std::endl;
-
 }
