@@ -31,7 +31,7 @@ void readArgs(int argc, char *argv[]){
         min_w = 1;
         max_w = 10;
     }
-    srand(0);
+    srand(seed);
 }
 std::vector<std::vector<int>> create_graph(int n, float sparcity, int min_w, int max_w){
     std::vector<std::vector<int>> graph(n, std::vector<int>(n,0));
